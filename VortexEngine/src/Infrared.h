@@ -56,6 +56,8 @@ private:
     WAITING_HEADER_SPACE,
     READING_DATA_MARK,
     READING_DATA_SPACE,
+    READING_DATA_DIVIDER_MARK,
+    READING_DATA_DIVIDER_SPACE,
   };
 
   // state information used by the PCIHandler

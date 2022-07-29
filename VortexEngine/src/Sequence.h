@@ -40,6 +40,8 @@ public:
   void setColorsetAt(const Colorset &colorset, LedMap positions);
   const Colorset &operator[](LedPos index) const;
 
+  void setColorsetOffset(uint32_t offset, LedMap positions);
+
   // serialize and unserialize a colorset map
   void serialize(SerialBuffer &buffer) const;
   void unserialize(SerialBuffer &buffer);

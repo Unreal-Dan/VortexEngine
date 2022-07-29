@@ -70,6 +70,10 @@ Pattern *PatternBuilder::unserialize(SerialBuffer &buffer)
 
 Pattern *PatternBuilder::makeInternal(PatternID id)
 {
+  if (id == PATTERN_NONE) {
+    // no error
+    return nullptr;
+  }
   Pattern *pat = generate(id);
   if (!pat) {
     ERROR_OUT_OF_MEMORY();
@@ -86,26 +90,28 @@ Pattern *PatternBuilder::makeInternal(PatternID id)
 #define evenTipsPattern(pattern) PatternMap(pattern, MAP_FINGER_EVEN_TIPS)
 #define evenTopsPattern(pattern) PatternMap(pattern, MAP_FINGER_EVEN_TOPS)
 
-Pattern *createTheaterChase()
+Pattern *PatternBuilder::createTheaterChase()
 {
   Sequence theaterChaseSequence;
-  PatternMap patMap;
+  LedMap positions;
   // there are 10 steps in the theater chase
   for (uint32_t i = 0; i < 10; ++i) {
+    PatternMap patMap;
+    // the first 5 steps are odd tips/tops alternating each step
     if (i < 5) {
-      // the first 5 steps are odd tips/tops alternating each step
-      patMap = (i % 2) ? oddTopsPattern(PATTERN_DOPS) : oddTipsPattern(PATTERN_DOPS);
+      positions = (i % 2) ? MAP_FINGER_ODD_TOPS : MAP_FINGER_ODD_TIPS;
     } else {
       // the end 5 steps are even tips/tops alternating each step
-      patMap = (i % 2) ? evenTopsPattern(PATTERN_DOPS) : evenTipsPattern(PATTERN_DOPS);
+      positions = (i % 2) ? MAP_FINGER_EVEN_TOPS : MAP_FINGER_EVEN_TIPS;
     }
+    patMap.setPatternAt(PATTERN_DOPS, positions);
     // each step is 25ms long
     theaterChaseSequence.addStep(25, patMap);
   }
   return new SequencedPattern(theaterChaseSequence);
 }
 
-Pattern *createChaser()
+Pattern *PatternBuilder::createChaser()
 {
   Sequence chaserSequence;
   // there are 8 steps in the chaser
@@ -148,6 +154,7 @@ Pattern *PatternBuilder::generate(PatternID id)
     case PATTERN_HUESHIFT: return new HueShiftPattern();
     case PATTERN_THEATER_CHASE: return createTheaterChase();
     case PATTERN_CHASER: return createChaser();
+    case PATTERN_NONE: return nullptr;
     default: break;
   }
   DEBUG_LOGF("Unknown pattern id: %u", id);

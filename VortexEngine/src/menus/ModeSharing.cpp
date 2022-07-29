@@ -8,6 +8,9 @@
 #include "../Leds.h"
 #include "../Log.h"
 
+// comment this out to use manual click-to-send
+//#define AUTO_MODE_SENDING
+
 ModeSharing::ModeSharing() :
   Menu(),
   m_sharingMode(ModeShareState::SHARE_SEND),
@@ -34,10 +37,12 @@ bool ModeSharing::run()
   switch (m_sharingMode) {
   case ModeShareState::SHARE_SEND:
     showSendMode();
+#ifdef AUTO_MODE_SENDING
     // send the mode every 3 seconds
     if ((Time::getCurtime() % Time::secToTicks(3)) == 0) {
       sendMode();
     }
+#endif
     break;
   case ModeShareState::SHARE_RECEIVE:
     showReceiveMode();
@@ -73,6 +78,12 @@ void ModeSharing::onShortClick()
 
 void ModeSharing::onLongClick()
 {
+#ifndef AUTO_MODE_SENDING
+  if (m_sharingMode == ModeShareState::SHARE_SEND) {
+    sendMode();
+    return;
+  }
+#endif
   leaveMenu();
 }
 

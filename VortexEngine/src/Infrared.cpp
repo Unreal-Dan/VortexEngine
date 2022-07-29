@@ -31,6 +31,10 @@ using namespace std;
 #define HEADER_MARK_MAX ((uint32_t)(HEADER_MARK * 1.15))
 #define HEADER_SPACE_MAX ((uint32_t)(HEADER_SPACE * 1.15))
 
+#define DIVIDER_SPACE HEADER_MARK
+#define DIVIDER_SPACE_MIN HEADER_MARK_MIN
+#define DIVIDER_SPACE_MAX HEADER_MARK_MAX
+
 #define IR_SEND_PWM_PIN 0
 #define RECEIVER_PIN 2
 
@@ -109,9 +113,10 @@ bool Infrared::read(SerialBuffer &data)
     return false;
   }
   for (uint32_t i = 0; i < size; ++i) {
-    DEBUG_LOGF("Read: 0x%x", actualData[i]);
+    DEBUG_LOGF("Read %u: 0x%x", i, actualData[i]);
   }
   // reset the IR state and receive buffer
+  DEBUG_LOG("Read data, resetting...");
   resetIRState();
   return true;
 }
@@ -155,17 +160,15 @@ bool Infrared::write(SerialBuffer &data)
     }
     // delay if there is more blocks
     if (block < (num_blocks - 1)) {
-      //mark(HEADER_MARK);
-      space(HEADER_SPACE);
+      mark(HEADER_MARK);
+      space(DIVIDER_SPACE * 2);
     }
   }
   buf_ptr = buf;
   for (uint32_t block = 0; block < num_blocks; ++block) {
-    // write the block which is 32 bytes unless on the last block
     uint32_t blocksize = (num_blocks == 1) ? remainder : 32;
-    // iterate each byte in the block and write it
     for (uint32_t i = 0; i < blocksize; ++i) {
-      DEBUG_LOGF("Wrote: 0x%x", *buf_ptr);
+      DEBUG_LOGF("Wrote %u: 0x%x", i, *buf_ptr);
       buf_ptr++;
     }
     // delay if there is more blocks
@@ -297,6 +300,7 @@ void Infrared::recvPCIHandler()
   // check previous time for validity
   if (!m_prevTime || m_prevTime > now) {
     m_prevTime = now;
+    DEBUG_LOG("Bad first time diff, resetting...");
     resetIRState();
     return;
   }
@@ -311,8 +315,8 @@ void Infrared::recvPCIHandler()
 void Infrared::handleIRTiming(uint32_t diff)
 {
   // if the diff is too long or too short then it's not useful
-  if (diff > HEADER_MARK_MAX || diff < IR_TIMING_MIN) {
-    DEBUG_LOGF("bad delay: %u", diff);
+  if ((diff > HEADER_MARK_MAX && m_recvState < READING_DATA_MARK) || diff < IR_TIMING_MIN) {
+    DEBUG_LOGF("bad delay: %u, resetting...", diff);
     resetIRState();
     return;
   }
@@ -320,6 +324,7 @@ void Infrared::handleIRTiming(uint32_t diff)
   case WAITING_HEADER_MARK:
     if (diff >= HEADER_MARK_MIN && diff <= HEADER_MARK_MAX) {
       m_recvState = WAITING_HEADER_SPACE;
+      DEBUG_LOG("Bad header mark, resetting...");
     } else {
       resetIRState();
     }
@@ -328,23 +333,32 @@ void Infrared::handleIRTiming(uint32_t diff)
     if (diff >= HEADER_SPACE_MIN && diff <= HEADER_SPACE_MAX) {
       m_recvState = READING_DATA_MARK;
     } else {
+      DEBUG_LOG("Bad header space, resetting...");
       resetIRState();
     }
     break;
   case READING_DATA_MARK:
     // classify mark/space based on the timing and write into buffer
     m_irData.write1Bit((diff > (IR_TIMING * 2)) ? 1 : 0);
-    if (m_irData.bitpos() > 0 && ((m_irData.bitpos() + 1) % 32) == 0) {
-      DEBUG_LOGF("Read: 0x%x", m_irData.dwData()[m_irData.dwordpos()]);
+#if 0
+    if (m_irData.bitpos() > 0 && ((m_irData.bitpos() + 1) % 8) == 0) {
+      DEBUG_LOGF("Read: 0x%x", m_irData.data()[m_irData.bytepos()]);
     }
-    if (((m_irData.bytepos() + 1) % 32) == 0) {
-      m_recvState = WAITING_HEADER_SPACE;
-    } else {
-      m_recvState = READING_DATA_SPACE;
-    }
+#endif
+    m_recvState = READING_DATA_SPACE;
     break;
   case READING_DATA_SPACE:
-    // skip spaces
+    // every 32 bytes expect a divider
+    if (((m_irData.bitpos() + 1) % 32) == 0) {
+      m_recvState = READING_DATA_DIVIDER_MARK;
+      break;
+    }
+    m_recvState = READING_DATA_MARK;
+    break;
+  case READING_DATA_DIVIDER_MARK:
+    m_recvState = READING_DATA_DIVIDER_SPACE;
+    break;
+  case READING_DATA_DIVIDER_SPACE:
     m_recvState = READING_DATA_MARK;
     break;
   default: // ??
@@ -356,6 +370,13 @@ void Infrared::handleIRTiming(uint32_t diff)
 void Infrared::resetIRState()
 {
   m_recvState = WAITING_HEADER_MARK;
+  DEBUG_LOG("Resetting IR State...");
+  if (m_irData.bytepos()) {
+    for (uint32_t i = 0; i < m_irData.bytepos(); ++i) {
+      DEBUG_LOGF("(on reset) IR Buf %u: 0x%x", i, m_irData.data()[i]);
+    }
+  }
   // zero out the receive buffer and reset bit receiver position
   m_irData.reset();
+  DEBUG_LOG("IR State Reset Complete");
 }
